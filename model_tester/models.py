@@ -44,6 +44,13 @@ IMAGE_MODELS: dict[str, ImageModel] = {
             adapter_name="v1",
             adapter_weight=1.0,
         ),
+        loras=(
+            LoraWeights(
+                source="gorlamee/LenovoUltraReal",
+                adapter_name="lenovo_ultrareal",
+                adapter_weight=0.6,
+            ),
+        ),
     ),
     "flux-dev": ImageModel(
         key="flux-dev",

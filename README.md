@@ -45,6 +45,9 @@ Pick a model from the registry:
 python3 -m model_tester --device cuda --model flux-lustly
 ```
 
+The `flux-lustly` profile uses FLUX.1-dev with the Lustly adapter plus `gorlamee/LenovoUltraReal`.
+Include the Lenovo trigger word `l3n0v0` in prompts when you want that adapter to steer the image.
+
 Base model without LoRA:
 
 ```bash
