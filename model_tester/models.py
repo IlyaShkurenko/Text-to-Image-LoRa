@@ -1,4 +1,8 @@
 from dataclasses import dataclass
+from typing import Literal
+
+
+PipelineKind = Literal["auto", "flux2-klein"]
 
 
 @dataclass(frozen=True)
@@ -10,10 +14,21 @@ class LoraWeights:
 
 
 @dataclass(frozen=True)
+class TextEncoderOverride:
+    source: str
+    tokenizer_source: str | None = None
+
+
+@dataclass(frozen=True)
 class ImageModel:
     key: str
     base_model_id: str
+    pipeline: PipelineKind = "auto"
     lora: LoraWeights | None = None
+    text_encoder: TextEncoderOverride | None = None
+    default_guidance_scale: float | None = None
+    default_num_inference_steps: int | None = None
+    default_cpu_offload: bool = False
 
 
 IMAGE_MODELS: dict[str, ImageModel] = {
@@ -30,5 +45,16 @@ IMAGE_MODELS: dict[str, ImageModel] = {
     "flux-dev": ImageModel(
         key="flux-dev",
         base_model_id="black-forest-labs/FLUX.1-dev",
+    ),
+    "flux2-klein-uncensored": ImageModel(
+        key="flux2-klein-uncensored",
+        base_model_id="black-forest-labs/FLUX.2-klein-9B",
+        pipeline="flux2-klein",
+        text_encoder=TextEncoderOverride(
+            source="ponpoke/flux2-klein-9b-uncensored-text-encoder",
+        ),
+        default_guidance_scale=1.0,
+        default_num_inference_steps=4,
+        default_cpu_offload=True,
     ),
 }
