@@ -52,6 +52,12 @@ python3 -m model_tester --device cuda --model flux-dev
 
 Generated images and matching metadata JSON files are saved to `outputs/`.
 
+By default, each run uses a random seed and writes the actual seed to the metadata JSON. To reproduce a result, pass the same seed explicitly:
+
+```bash
+python3 -m model_tester --device cuda --model flux-lustly --seed 42
+```
+
 ## Vast.ai Quick Check
 
 ```bash

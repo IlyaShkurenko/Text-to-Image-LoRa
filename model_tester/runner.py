@@ -2,6 +2,7 @@ import argparse
 from datetime import datetime
 import json
 from pathlib import Path
+import random
 import re
 import sys
 
@@ -38,7 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--width", type=int, default=WIDTH)
     parser.add_argument("--steps", type=int, default=NUM_INFERENCE_STEPS)
     parser.add_argument("--guidance-scale", type=float, default=GUIDANCE_SCALE)
-    parser.add_argument("--seed", type=int, default=SEED)
+    parser.add_argument("--seed", type=int, default=SEED, help="Use a fixed seed. Omit for a random seed.")
     return parser.parse_args()
 
 
@@ -131,6 +132,7 @@ def build_metadata(
     args: argparse.Namespace,
     output_path: str,
     resolved_device: str,
+    seed: int,
 ) -> dict[str, object]:
     metadata = {
         "prompt": prompt,
@@ -141,7 +143,7 @@ def build_metadata(
         "width": args.width,
         "num_inference_steps": args.steps,
         "guidance_scale": args.guidance_scale,
-        "seed": args.seed,
+        "seed": seed,
         "requested_device": args.device,
         "resolved_device": resolved_device,
         "torch_dtype": args.dtype,
@@ -170,7 +172,8 @@ def generate_image(model: ImageModel, prompt: str, args: argparse.Namespace) -> 
         raise RuntimeError("Missing torch. Install CUDA PyTorch before running generation.") from error
 
     pipeline, resolved_device = create_pipeline(model=model, device=args.device, dtype_name=args.dtype)
-    generator = torch.Generator(device="cpu").manual_seed(args.seed) if args.seed is not None else None
+    seed = args.seed if args.seed is not None else random.randint(0, 2**32 - 1)
+    generator = torch.Generator(device="cpu").manual_seed(seed)
 
     image = pipeline(
         prompt=prompt,
@@ -183,7 +186,7 @@ def generate_image(model: ImageModel, prompt: str, args: argparse.Namespace) -> 
 
     output_path = build_output_path(str(args.output_dir), model.key, prompt)
     image.images[0].save(output_path)
-    save_metadata(output_path, build_metadata(model, prompt, args, output_path, resolved_device))
+    save_metadata(output_path, build_metadata(model, prompt, args, output_path, resolved_device, seed))
     return output_path
 
 
