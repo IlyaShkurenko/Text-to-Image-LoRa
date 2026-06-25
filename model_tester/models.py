@@ -3,6 +3,7 @@ from typing import Literal
 
 
 PipelineKind = Literal["auto", "flux2-klein"]
+AdapterKind = Literal["lora", "lokr"]
 
 
 @dataclass(frozen=True)
@@ -11,6 +12,7 @@ class LoraWeights:
     adapter_name: str
     weight_name: str | None = None
     adapter_weight: float = 1.0
+    adapter_kind: AdapterKind = "lora"
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,12 @@ IMAGE_MODELS: dict[str, ImageModel] = {
             source="ponpoke/flux2-klein-9b-uncensored-text-encoder",
         ),
         loras=(
+            LoraWeights(
+                source="models/loras/klein_snofs_v1_4.safetensors",
+                adapter_name="snofs",
+                adapter_weight=0.8,
+                adapter_kind="lokr",
+            ),
             LoraWeights(
                 source="models/loras/lenovo_flux2.safetensors",
                 adapter_name="lenovo_ultrareal",

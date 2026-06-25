@@ -57,7 +57,8 @@ FLUX.2 Klein 9B with the ponpoke text encoder:
 python3 -m model_tester --device cuda --model flux2-klein-uncensored
 ```
 
-The `flux2-klein-uncensored` profile also loads the local FLUX.2 Lenovo UltraReal LoRA from `models/loras/`:
+The `flux2-klein-uncensored` profile also loads the local FLUX.2 adapter stack from `models/loras/`.
+SNOFS is applied as a LoKr merge, and Lenovo UltraReal is loaded as a standard LoRA:
 
 ```bash
 python3 -m model_tester \
@@ -66,9 +67,6 @@ python3 -m model_tester \
   --steps 20 \
   --guidance-scale 2.0
 ```
-
-The SNOFS Klein file uses LoKr/LyCORIS keys (`lokr_w1`/`lokr_w2`), which `diffusers.load_lora_weights()`
-does not load as a standard LoRA in this tester.
 
 The FLUX.2 Klein profile defaults to `--steps 4`, `--guidance-scale 1.0`, and CUDA CPU offload. You can override them:
 
