@@ -63,11 +63,6 @@ IMAGE_MODELS: dict[str, ImageModel] = {
                 adapter_weight=0.8,
                 adapter_kind="lokr",
             ),
-            LoraWeights(
-                source="models/loras/lenovo_flux2.safetensors",
-                adapter_name="lenovo_ultrareal",
-                adapter_weight=0.6,
-            ),
         ),
         default_guidance_scale=1.0,
         default_num_inference_steps=4,

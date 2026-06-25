@@ -57,8 +57,8 @@ FLUX.2 Klein 9B with the ponpoke text encoder:
 python3 -m model_tester --device cuda --model flux2-klein-uncensored
 ```
 
-The `flux2-klein-uncensored` profile also loads the local FLUX.2 adapter stack from `models/loras/`.
-SNOFS is applied as a LoKr merge, and Lenovo UltraReal is loaded as a standard LoRA:
+The `flux2-klein-uncensored` profile also loads the local SNOFS adapter from `models/loras/`.
+SNOFS is a LoKr/LyCORIS file, so this tester merges it into the FLUX.2 Klein transformer weights before generation:
 
 ```bash
 python3 -m model_tester \
@@ -67,6 +67,9 @@ python3 -m model_tester \
   --steps 20 \
   --guidance-scale 2.0
 ```
+
+The downloaded `lenovo_flux2.safetensors` file is not enabled by default because its tensor shapes target a 6144-wide
+FLUX.2 model, while `black-forest-labs/FLUX.2-klein-9B` uses 4096-wide transformer weights.
 
 The FLUX.2 Klein profile defaults to `--steps 4`, `--guidance-scale 1.0`, and CUDA CPU offload. You can override them:
 

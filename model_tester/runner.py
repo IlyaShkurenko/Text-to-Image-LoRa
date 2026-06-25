@@ -220,6 +220,63 @@ def resolve_loras(model: ImageModel, args: argparse.Namespace) -> list[LoraWeigh
     ]
 
 
+def resolve_lokr_target_modules(
+    base_key: str,
+    delta: object,
+    modules: dict[str, object],
+) -> list[tuple[object, object]]:
+    def module(name: str) -> object | None:
+        loaded = modules.get(name)
+        if loaded is not None and hasattr(loaded, "weight"):
+            return loaded
+        return None
+
+    direct = module(base_key)
+    if direct is not None:
+        return [(direct, delta)]
+
+    parts = base_key.split(".")
+    if len(parts) == 4 and parts[0] == "double_blocks":
+        block_index = parts[1]
+        stream = parts[2]
+        layer = parts[3]
+        prefix = f"transformer_blocks.{block_index}"
+
+        if stream == "img_attn" and layer == "qkv":
+            chunks = delta.chunk(3, dim=0)
+            names = [f"{prefix}.attn.to_q", f"{prefix}.attn.to_k", f"{prefix}.attn.to_v"]
+            return [(loaded, chunk) for name, chunk in zip(names, chunks) if (loaded := module(name)) is not None]
+        if stream == "txt_attn" and layer == "qkv":
+            chunks = delta.chunk(3, dim=0)
+            names = [f"{prefix}.attn.add_q_proj", f"{prefix}.attn.add_k_proj", f"{prefix}.attn.add_v_proj"]
+            return [(loaded, chunk) for name, chunk in zip(names, chunks) if (loaded := module(name)) is not None]
+
+        mapped_names = {
+            ("img_attn", "proj"): f"{prefix}.attn.to_out.0",
+            ("txt_attn", "proj"): f"{prefix}.attn.to_add_out",
+            ("img_mlp", "0"): f"{prefix}.ff.linear_in",
+            ("img_mlp", "2"): f"{prefix}.ff.linear_out",
+            ("txt_mlp", "0"): f"{prefix}.ff_context.linear_in",
+            ("txt_mlp", "2"): f"{prefix}.ff_context.linear_out",
+        }
+        mapped = mapped_names.get((stream, layer))
+        if mapped and (loaded := module(mapped)) is not None:
+            return [(loaded, delta)]
+
+    if len(parts) == 3 and parts[0] == "single_blocks":
+        block_index = parts[1]
+        layer = parts[2]
+        mapped_names = {
+            "linear1": f"single_transformer_blocks.{block_index}.attn.to_qkv_mlp_proj",
+            "linear2": f"single_transformer_blocks.{block_index}.attn.to_out",
+        }
+        mapped = mapped_names.get(layer)
+        if mapped and (loaded := module(mapped)) is not None:
+            return [(loaded, delta)]
+
+    return []
+
+
 def apply_lokr_weights(pipeline: object, lora: LoraWeights) -> None:
     try:
         import torch
@@ -250,22 +307,22 @@ def apply_lokr_weights(pipeline: object, lora: LoraWeights) -> None:
                 unsupported.append(base_key)
                 continue
 
-            module = modules.get(base_key)
-            if module is None or not hasattr(module, "weight"):
-                missing.append(base_key)
-                continue
-
-            weight = module.weight
             w1 = handle.get_tensor(f"diffusion_model.{base_key}.lokr_w1")
             w2 = handle.get_tensor(f"diffusion_model.{base_key}.lokr_w2")
+            delta = torch.kron(w1.float(), w2.float()) * float(lora.adapter_weight)
+            targets = resolve_lokr_target_modules(base_key, delta, modules)
+            if not targets:
+                missing.append(base_key)
+                del delta, w1, w2
+                continue
 
-            delta = torch.kron(w1.float(), w2.float()).reshape(weight.shape)
-            delta = delta * float(lora.adapter_weight)
+            for module, module_delta in targets:
+                weight = module.weight
+                module_delta = module_delta.reshape(weight.shape)
+                with torch.no_grad():
+                    weight.data.add_(module_delta.to(device=weight.device, dtype=weight.dtype))
+                applied += 1
 
-            with torch.no_grad():
-                weight.data.add_(delta.to(device=weight.device, dtype=weight.dtype))
-
-            applied += 1
             del delta, w1, w2
 
     print(f"Applied LoKr adapter {lora.adapter_name}: {applied} modules from {lora.source}")
