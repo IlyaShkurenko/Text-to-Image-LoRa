@@ -56,6 +56,17 @@ IMAGE_MODELS: dict[str, ImageModel] = {
         key="flux-dev",
         base_model_id="black-forest-labs/FLUX.1-dev",
     ),
+    "flux-dev-lenovo": ImageModel(
+        key="flux-dev-lenovo",
+        base_model_id="black-forest-labs/FLUX.1-dev",
+        loras=(
+            LoraWeights(
+                source="gorlamee/LenovoUltraReal",
+                adapter_name="lenovo_ultrareal",
+                adapter_weight=0.8,
+            ),
+        ),
+    ),
     "flux2-klein-uncensored": ImageModel(
         key="flux2-klein-uncensored",
         base_model_id="black-forest-labs/FLUX.2-klein-9B",
@@ -71,6 +82,22 @@ IMAGE_MODELS: dict[str, ImageModel] = {
                 adapter_kind="lokr",
             ),
         ),
+        default_guidance_scale=1.0,
+        default_num_inference_steps=4,
+        default_cpu_offload=True,
+    ),
+    "flux2-klein-snofs-timdrnl": ImageModel(
+        key="flux2-klein-snofs-timdrnl",
+        base_model_id="timdrnl/FLUX.2-klein-9B-SNOFS",
+        pipeline="flux2-klein",
+        default_guidance_scale=1.0,
+        default_num_inference_steps=4,
+        default_cpu_offload=True,
+    ),
+    "flux2-klein-snofs-sintecs": ImageModel(
+        key="flux2-klein-snofs-sintecs",
+        base_model_id="sintecs/flux2-klein-9b-snofs-merged",
+        pipeline="flux2-klein",
         default_guidance_scale=1.0,
         default_num_inference_steps=4,
         default_cpu_offload=True,

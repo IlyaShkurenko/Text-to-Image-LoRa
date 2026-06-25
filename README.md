@@ -54,6 +54,12 @@ Base model without LoRA:
 python3 -m model_tester --device cuda --model flux-dev
 ```
 
+FLUX.1-dev with only Lenovo UltraReal:
+
+```bash
+python3 -m model_tester --device cuda --model flux-dev-lenovo --prompt "l3n0v0. your prompt"
+```
+
 FLUX.2 Klein 9B with the ponpoke text encoder:
 
 ```bash
@@ -73,6 +79,13 @@ python3 -m model_tester \
 
 The downloaded `lenovo_flux2.safetensors` file is not enabled by default because its tensor shapes target a 6144-wide
 FLUX.2 model, while `black-forest-labs/FLUX.2-klein-9B` uses 4096-wide transformer weights.
+
+Merged FLUX.2 Klein SNOFS profiles:
+
+```bash
+python3 -m model_tester --device cuda --model flux2-klein-snofs-timdrnl
+python3 -m model_tester --device cuda --model flux2-klein-snofs-sintecs
+```
 
 The FLUX.2 Klein profile defaults to `--steps 4`, `--guidance-scale 1.0`, and CUDA CPU offload. You can override them:
 
