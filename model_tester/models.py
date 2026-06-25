@@ -25,6 +25,7 @@ class ImageModel:
     base_model_id: str
     pipeline: PipelineKind = "auto"
     lora: LoraWeights | None = None
+    loras: tuple[LoraWeights, ...] = ()
     text_encoder: TextEncoderOverride | None = None
     default_guidance_scale: float | None = None
     default_num_inference_steps: int | None = None
@@ -52,6 +53,18 @@ IMAGE_MODELS: dict[str, ImageModel] = {
         pipeline="flux2-klein",
         text_encoder=TextEncoderOverride(
             source="ponpoke/flux2-klein-9b-uncensored-text-encoder",
+        ),
+        loras=(
+            LoraWeights(
+                source="models/loras/klein_snofs_v1_4.safetensors.download/klein_snofs_v1_4.safetensors",
+                adapter_name="snofs",
+                adapter_weight=0.8,
+            ),
+            LoraWeights(
+                source="models/loras/lenovo_flux2.safetensors",
+                adapter_name="lenovo_ultrareal",
+                adapter_weight=0.6,
+            ),
         ),
         default_guidance_scale=1.0,
         default_num_inference_steps=4,

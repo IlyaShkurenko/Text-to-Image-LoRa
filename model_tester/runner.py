@@ -51,10 +51,31 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Guidance scale. Defaults to the selected model profile.",
     )
     parser.add_argument("--seed", type=int, default=SEED, help="Use a fixed seed. Omit for a random seed.")
-    parser.add_argument("--lora-weight", type=float, default=None, help="Override the model profile LoRA weight.")
-    parser.add_argument("--lora-source", default=None, help="Optional Hugging Face repo or local path for LoRA weights.")
-    parser.add_argument("--lora-weight-name", default=None, help="Optional LoRA file name inside --lora-source.")
-    parser.add_argument("--lora-adapter-name", default=None, help="Adapter name for --lora-source.")
+    parser.add_argument(
+        "--lora-weight",
+        type=float,
+        action="append",
+        default=None,
+        help="Override LoRA weight. Repeat once per --lora-source for multiple adapters.",
+    )
+    parser.add_argument(
+        "--lora-source",
+        action="append",
+        default=None,
+        help="Optional Hugging Face repo or local path for LoRA weights. Repeat to stack adapters.",
+    )
+    parser.add_argument(
+        "--lora-weight-name",
+        action="append",
+        default=None,
+        help="Optional LoRA file name inside --lora-source. Repeat to match --lora-source.",
+    )
+    parser.add_argument(
+        "--lora-adapter-name",
+        action="append",
+        default=None,
+        help="Adapter name for --lora-source. Repeat to match --lora-source.",
+    )
     parser.add_argument(
         "--text-encoder-source",
         default=None,
@@ -103,11 +124,28 @@ def resolve_dtype(torch: object, dtype_name: str) -> object:
         raise RuntimeError(f"Unknown dtype {dtype_name!r}. Use one of: {allowed}.") from error
 
 
-def resolve_lora_weight(model: ImageModel, override_weight: float | None) -> float | None:
-    if not model.lora:
-        return None
+def profile_loras(model: ImageModel) -> list[LoraWeights]:
+    loras = []
+    if model.lora:
+        loras.append(model.lora)
+    loras.extend(model.loras)
+    return loras
 
-    return model.lora.adapter_weight if override_weight is None else override_weight
+
+def get_indexed_str(values: list[str] | None, index: int) -> str | None:
+    if not values:
+        return None
+    if index < len(values):
+        return values[index]
+    return None
+
+
+def get_indexed_float(values: list[float] | None, index: int) -> float | None:
+    if not values:
+        return None
+    if index < len(values):
+        return values[index]
+    return None
 
 
 def reject_placeholder_value(option_name: str, value: str | None) -> None:
@@ -126,23 +164,15 @@ def resolve_model(args: argparse.Namespace) -> ImageModel:
     model = IMAGE_MODELS[args.model]
 
     reject_placeholder_value("--text-encoder-source", args.text_encoder_source)
-    reject_placeholder_value("--lora-source", args.lora_source)
-    reject_placeholder_value("--lora-weight-name", args.lora_weight_name)
+    for lora_source in args.lora_source or []:
+        reject_placeholder_value("--lora-source", lora_source)
+    for lora_weight_name in args.lora_weight_name or []:
+        reject_placeholder_value("--lora-weight-name", lora_weight_name)
 
     if args.text_encoder_source:
         model = replace(model, text_encoder=TextEncoderOverride(source=args.text_encoder_source))
 
-    if args.lora_source:
-        model = replace(
-            model,
-            lora=LoraWeights(
-                source=args.lora_source,
-                adapter_name=args.lora_adapter_name or "custom",
-                weight_name=args.lora_weight_name,
-                adapter_weight=args.lora_weight if args.lora_weight is not None else 1.0,
-            ),
-        )
-    elif args.lora_adapter_name or args.lora_weight_name:
+    if not args.lora_source and (args.lora_adapter_name or args.lora_weight_name):
         if not model.lora:
             raise RuntimeError("--lora-adapter-name and --lora-weight-name require --lora-source for this model.")
 
@@ -150,12 +180,43 @@ def resolve_model(args: argparse.Namespace) -> ImageModel:
             model,
             lora=replace(
                 model.lora,
-                adapter_name=args.lora_adapter_name or model.lora.adapter_name,
-                weight_name=args.lora_weight_name or model.lora.weight_name,
+                adapter_name=get_indexed_str(args.lora_adapter_name, 0) or model.lora.adapter_name,
+                weight_name=get_indexed_str(args.lora_weight_name, 0) or model.lora.weight_name,
             ),
         )
 
     return model
+
+
+def resolve_loras(model: ImageModel, args: argparse.Namespace) -> list[LoraWeights]:
+    if args.lora_source:
+        loras = []
+        for index, source in enumerate(args.lora_source):
+            adapter_name = get_indexed_str(args.lora_adapter_name, index) or f"custom_{index + 1}"
+            weight_name = get_indexed_str(args.lora_weight_name, index)
+            adapter_weight = get_indexed_float(args.lora_weight, index)
+            loras.append(
+                LoraWeights(
+                    source=source,
+                    adapter_name=adapter_name,
+                    weight_name=weight_name,
+                    adapter_weight=adapter_weight if adapter_weight is not None else 1.0,
+                )
+            )
+        return loras
+
+    loras = profile_loras(model)
+    if not loras:
+        return []
+
+    weights = args.lora_weight or []
+    if not weights:
+        return loras
+
+    return [
+        replace(lora, adapter_weight=weights[index] if index < len(weights) else lora.adapter_weight)
+        for index, lora in enumerate(loras)
+    ]
 
 
 def resolve_guidance_scale(model: ImageModel, override_guidance_scale: float | None) -> float:
@@ -189,7 +250,7 @@ def create_pipeline(
     model: ImageModel,
     device: str,
     dtype_name: str,
-    lora_weight: float | None,
+    loras: list[LoraWeights],
     cpu_offload: bool,
 ) -> tuple[object, str]:
     try:
@@ -257,18 +318,20 @@ def create_pipeline(
             )
         pipeline.to(resolved_device)
 
-    if model.lora:
+    for lora in loras:
         lora_kwargs = {
-            "adapter_name": model.lora.adapter_name,
+            "adapter_name": lora.adapter_name,
             "token": token,
         }
-        if model.lora.weight_name:
-            lora_kwargs["weight_name"] = model.lora.weight_name
+        if lora.weight_name:
+            lora_kwargs["weight_name"] = lora.weight_name
 
-        pipeline.load_lora_weights(model.lora.source, **lora_kwargs)
+        pipeline.load_lora_weights(lora.source, **lora_kwargs)
+
+    if loras:
         pipeline.set_adapters(
-            [model.lora.adapter_name],
-            adapter_weights=[lora_weight],
+            [lora.adapter_name for lora in loras],
+            adapter_weights=[lora.adapter_weight for lora in loras],
         )
 
     return pipeline, resolved_device
@@ -291,7 +354,7 @@ def build_metadata(
     output_path: str,
     resolved_device: str,
     seed: int,
-    lora_weight: float | None,
+    loras: list[LoraWeights],
     guidance_scale: float,
     num_inference_steps: int,
     cpu_offload: bool,
@@ -319,13 +382,16 @@ def build_metadata(
             "tokenizer_source": model.text_encoder.tokenizer_source or model.text_encoder.source,
         }
 
-    if model.lora:
-        metadata["lora"] = {
-            "source": model.lora.source,
-            "weight_name": model.lora.weight_name,
-            "adapter_name": model.lora.adapter_name,
-            "adapter_weight": lora_weight,
-        }
+    if loras:
+        metadata["loras"] = [
+            {
+                "source": lora.source,
+                "weight_name": lora.weight_name,
+                "adapter_name": lora.adapter_name,
+                "adapter_weight": lora.adapter_weight,
+            }
+            for lora in loras
+        ]
 
     return metadata
 
@@ -341,7 +407,7 @@ def generate_image(model: ImageModel, prompt: str, args: argparse.Namespace) -> 
     except ImportError as error:
         raise RuntimeError("Missing torch. Install CUDA PyTorch before running generation.") from error
 
-    lora_weight = resolve_lora_weight(model, args.lora_weight)
+    loras = resolve_loras(model, args)
     guidance_scale = resolve_guidance_scale(model, args.guidance_scale)
     num_inference_steps = resolve_num_inference_steps(model, args.steps)
     cpu_offload = resolve_cpu_offload(model, args.cpu_offload)
@@ -349,7 +415,7 @@ def generate_image(model: ImageModel, prompt: str, args: argparse.Namespace) -> 
         model=model,
         device=args.device,
         dtype_name=args.dtype,
-        lora_weight=lora_weight,
+        loras=loras,
         cpu_offload=cpu_offload,
     )
     seed = args.seed if args.seed is not None else random.randint(0, 2**32 - 1)
@@ -359,8 +425,8 @@ def generate_image(model: ImageModel, prompt: str, args: argparse.Namespace) -> 
     print(f"Using guidance scale: {guidance_scale}")
     if cpu_offload:
         print("Using CPU offload")
-    if lora_weight is not None:
-        print(f"Using LoRA weight: {lora_weight}")
+    for lora in loras:
+        print(f"Using LoRA: {lora.adapter_name} ({lora.source}) weight={lora.adapter_weight}")
 
     image = pipeline(
         prompt=prompt,
@@ -382,7 +448,7 @@ def generate_image(model: ImageModel, prompt: str, args: argparse.Namespace) -> 
             output_path,
             resolved_device,
             seed,
-            lora_weight,
+            loras,
             guidance_scale,
             num_inference_steps,
             cpu_offload,

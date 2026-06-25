@@ -57,6 +57,16 @@ FLUX.2 Klein 9B with the ponpoke text encoder:
 python3 -m model_tester --device cuda --model flux2-klein-uncensored
 ```
 
+The `flux2-klein-uncensored` profile also loads the local FLUX.2 LoRA stack from `models/loras/`:
+
+```bash
+python3 -m model_tester \
+  --device cuda \
+  --model flux2-klein-uncensored \
+  --steps 20 \
+  --guidance-scale 2.0
+```
+
 The FLUX.2 Klein profile defaults to `--steps 4`, `--guidance-scale 1.0`, and CUDA CPU offload. You can override them:
 
 ```bash
