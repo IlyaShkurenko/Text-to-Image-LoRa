@@ -195,7 +195,7 @@ def create_pipeline(
     try:
         import torch
         from diffusers import AutoPipelineForText2Image
-        from transformers import AutoModel, AutoTokenizer
+        from transformers import AutoModelForCausalLM, AutoTokenizer
     except ImportError as error:
         raise RuntimeError(
             "Missing local generation dependencies. Install torch + diffusers first. "
@@ -231,7 +231,7 @@ def create_pipeline(
         if model.text_encoder:
             tokenizer_source = model.text_encoder.tokenizer_source or model.text_encoder.source
             pipeline_kwargs["tokenizer"] = AutoTokenizer.from_pretrained(tokenizer_source, token=token)
-            pipeline_kwargs["text_encoder"] = AutoModel.from_pretrained(
+            pipeline_kwargs["text_encoder"] = AutoModelForCausalLM.from_pretrained(
                 model.text_encoder.source,
                 torch_dtype=dtype,
                 token=token,

@@ -63,6 +63,9 @@ The FLUX.2 Klein profile defaults to `--steps 4`, `--guidance-scale 1.0`, and CU
 python3 -m model_tester --device cuda --model flux2-klein-uncensored --steps 8 --guidance-scale 1.0 --no-cpu-offload
 ```
 
+For FLUX.2 Klein, Diffusers may print that guidance scale is ignored. That is expected for this step-wise
+distilled model; tune prompt, seed, resolution, and step count instead.
+
 Generated images and matching metadata JSON files are saved to `outputs/`.
 
 By default, each run uses a random seed and writes the actual seed to the metadata JSON. To reproduce a result, pass the same seed explicitly:
