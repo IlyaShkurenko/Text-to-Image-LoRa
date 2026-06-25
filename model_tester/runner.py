@@ -110,8 +110,24 @@ def resolve_lora_weight(model: ImageModel, override_weight: float | None) -> flo
     return model.lora.adapter_weight if override_weight is None else override_weight
 
 
+def reject_placeholder_value(option_name: str, value: str | None) -> None:
+    if not value:
+        return
+
+    placeholder_fragments = ("your-", "replace-me", "example/", "your_")
+    if any(fragment in value for fragment in placeholder_fragments):
+        raise RuntimeError(
+            f"{option_name}={value!r} is a placeholder from the README. "
+            "Replace it with a real Hugging Face repo/file name, or remove the LoRA options."
+        )
+
+
 def resolve_model(args: argparse.Namespace) -> ImageModel:
     model = IMAGE_MODELS[args.model]
+
+    reject_placeholder_value("--text-encoder-source", args.text_encoder_source)
+    reject_placeholder_value("--lora-source", args.lora_source)
+    reject_placeholder_value("--lora-weight-name", args.lora_weight_name)
 
     if args.text_encoder_source:
         model = replace(model, text_encoder=TextEncoderOverride(source=args.text_encoder_source))

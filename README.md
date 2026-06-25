@@ -83,11 +83,14 @@ You can also attach a LoRA by parameter instead of adding it to `model_tester/mo
 python3 -m model_tester \
   --device cuda \
   --model flux2-klein-uncensored \
-  --lora-source your-hf-user/your-flux2-lora \
-  --lora-weight-name your_lora.safetensors \
+  --lora-source REPLACE_WITH_REAL_HF_REPO \
+  --lora-weight-name REPLACE_WITH_REAL_FILE.safetensors \
   --lora-adapter-name subject \
   --lora-weight 0.4
 ```
+
+If you do not have a real FLUX.2-compatible LoRA yet, omit all `--lora-*` options and run only the base
+`flux2-klein-uncensored` profile.
 
 Use only LoRAs and prompts you have the legal right and consent to use.
 
