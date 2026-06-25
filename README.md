@@ -58,6 +58,12 @@ By default, each run uses a random seed and writes the actual seed to the metada
 python3 -m model_tester --device cuda --model flux-lustly --seed 42
 ```
 
+For LoRA profiles, you can weaken or strengthen the adapter without editing code:
+
+```bash
+python3 -m model_tester --device cuda --model flux-lustly --lora-weight 0.6
+```
+
 ## Vast.ai Quick Check
 
 ```bash

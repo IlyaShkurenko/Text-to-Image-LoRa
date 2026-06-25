@@ -40,6 +40,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--steps", type=int, default=NUM_INFERENCE_STEPS)
     parser.add_argument("--guidance-scale", type=float, default=GUIDANCE_SCALE)
     parser.add_argument("--seed", type=int, default=SEED, help="Use a fixed seed. Omit for a random seed.")
+    parser.add_argument("--lora-weight", type=float, default=None, help="Override the model profile LoRA weight.")
     return parser.parse_args()
 
 
@@ -70,7 +71,19 @@ def resolve_dtype(torch: object, dtype_name: str) -> object:
         raise RuntimeError(f"Unknown dtype {dtype_name!r}. Use one of: {allowed}.") from error
 
 
-def create_pipeline(model: ImageModel, device: str, dtype_name: str) -> tuple[object, str]:
+def resolve_lora_weight(model: ImageModel, override_weight: float | None) -> float | None:
+    if not model.lora:
+        return None
+
+    return model.lora.adapter_weight if override_weight is None else override_weight
+
+
+def create_pipeline(
+    model: ImageModel,
+    device: str,
+    dtype_name: str,
+    lora_weight: float | None,
+) -> tuple[object, str]:
     try:
         import torch
         from diffusers import AutoPipelineForText2Image
@@ -110,16 +123,16 @@ def create_pipeline(model: ImageModel, device: str, dtype_name: str) -> tuple[ob
         pipeline.load_lora_weights(model.lora.source, **lora_kwargs)
         pipeline.set_adapters(
             [model.lora.adapter_name],
-            adapter_weights=[model.lora.adapter_weight],
+            adapter_weights=[lora_weight],
         )
 
     return pipeline, resolved_device
 
 
-def build_output_path(output_dir: str, model_key: str, prompt: str) -> str:
+def build_output_path(output_dir: str, model_key: str, prompt: str, seed: int) -> str:
     safe_prompt = re.sub(r"[^a-zA-Z0-9]+", "-", prompt).strip("-").lower()[:50]
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    filename = f"{timestamp}-{model_key}-{safe_prompt or 'image'}.png"
+    filename = f"{timestamp}-{model_key}-seed-{seed}-{safe_prompt or 'image'}.png"
 
     output_path = Path(output_dir) / filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -133,6 +146,7 @@ def build_metadata(
     output_path: str,
     resolved_device: str,
     seed: int,
+    lora_weight: float | None,
 ) -> dict[str, object]:
     metadata = {
         "prompt": prompt,
@@ -154,7 +168,7 @@ def build_metadata(
             "source": model.lora.source,
             "weight_name": model.lora.weight_name,
             "adapter_name": model.lora.adapter_name,
-            "adapter_weight": model.lora.adapter_weight,
+            "adapter_weight": lora_weight,
         }
 
     return metadata
@@ -171,9 +185,18 @@ def generate_image(model: ImageModel, prompt: str, args: argparse.Namespace) -> 
     except ImportError as error:
         raise RuntimeError("Missing torch. Install CUDA PyTorch before running generation.") from error
 
-    pipeline, resolved_device = create_pipeline(model=model, device=args.device, dtype_name=args.dtype)
+    lora_weight = resolve_lora_weight(model, args.lora_weight)
+    pipeline, resolved_device = create_pipeline(
+        model=model,
+        device=args.device,
+        dtype_name=args.dtype,
+        lora_weight=lora_weight,
+    )
     seed = args.seed if args.seed is not None else random.randint(0, 2**32 - 1)
     generator = torch.Generator(device="cpu").manual_seed(seed)
+    print(f"Using seed: {seed}")
+    if lora_weight is not None:
+        print(f"Using LoRA weight: {lora_weight}")
 
     image = pipeline(
         prompt=prompt,
@@ -184,9 +207,9 @@ def generate_image(model: ImageModel, prompt: str, args: argparse.Namespace) -> 
         generator=generator,
     )
 
-    output_path = build_output_path(str(args.output_dir), model.key, prompt)
+    output_path = build_output_path(str(args.output_dir), model.key, prompt, seed)
     image.images[0].save(output_path)
-    save_metadata(output_path, build_metadata(model, prompt, args, output_path, resolved_device, seed))
+    save_metadata(output_path, build_metadata(model, prompt, args, output_path, resolved_device, seed, lora_weight))
     return output_path
 
 
