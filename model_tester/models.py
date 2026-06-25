@@ -56,11 +56,6 @@ IMAGE_MODELS: dict[str, ImageModel] = {
         ),
         loras=(
             LoraWeights(
-                source="models/loras/klein_snofs_v1_4.safetensors",
-                adapter_name="snofs",
-                adapter_weight=0.8,
-            ),
-            LoraWeights(
                 source="models/loras/lenovo_flux2.safetensors",
                 adapter_name="lenovo_ultrareal",
                 adapter_weight=0.6,
