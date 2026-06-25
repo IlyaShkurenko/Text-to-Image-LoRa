@@ -439,8 +439,27 @@ def create_pipeline(
         }
         if lora.weight_name:
             lora_kwargs["weight_name"] = lora.weight_name
+        if lora.use_load_prefix:
+            lora_kwargs["prefix"] = lora.load_prefix
 
-        pipeline.load_lora_weights(lora.source, **lora_kwargs)
+        if lora.state_dict_key_prefix:
+            fetch_kwargs = {"token": token}
+            if lora.weight_name:
+                fetch_kwargs["weight_name"] = lora.weight_name
+            state_dict = pipeline.lora_state_dict(lora.source, **fetch_kwargs)
+            key_prefix = lora.state_dict_key_prefix
+            normalized_state_dict = {}
+            for key, value in state_dict.items():
+                if lora.strip_default_adapter_key:
+                    key = key.replace(".lora_A.default.weight", ".lora_A.weight")
+                    key = key.replace(".lora_B.default.weight", ".lora_B.weight")
+                normalized_key = key if key.startswith(key_prefix) else f"{key_prefix}{key}"
+                normalized_state_dict[normalized_key] = value
+
+            state_dict = normalized_state_dict
+            pipeline.load_lora_weights(state_dict, adapter_name=lora.adapter_name)
+        else:
+            pipeline.load_lora_weights(lora.source, **lora_kwargs)
 
     if standard_loras:
         pipeline.set_adapters(
@@ -476,6 +495,7 @@ def build_output_path(output_dir: str, model_key: str, prompt: str, seed: int) -
 def build_metadata(
     model: ImageModel,
     prompt: str,
+    requested_prompt: str,
     args: argparse.Namespace,
     output_path: str,
     resolved_device: str,
@@ -487,6 +507,7 @@ def build_metadata(
 ) -> dict[str, object]:
     metadata = {
         "prompt": prompt,
+        "requested_prompt": requested_prompt,
         "output_path": output_path,
         "model_key": model.key,
         "base_model_id": model.base_model_id,
@@ -516,6 +537,11 @@ def build_metadata(
                 "adapter_name": lora.adapter_name,
                 "adapter_weight": lora.adapter_weight,
                 "adapter_kind": lora.adapter_kind,
+                "prompt_prefix": lora.prompt_prefix,
+                "load_prefix": lora.load_prefix,
+                "use_load_prefix": lora.use_load_prefix,
+                "state_dict_key_prefix": lora.state_dict_key_prefix,
+                "strip_default_adapter_key": lora.strip_default_adapter_key,
             }
             for lora in loras
         ]
@@ -528,6 +554,23 @@ def save_metadata(output_path: str, metadata: dict[str, object]) -> None:
     metadata_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def apply_lora_prompt_prefixes(prompt: str, loras: list[LoraWeights]) -> str:
+    prefixes = []
+    normalized_prompt = prompt.lstrip().lower()
+    for lora in loras:
+        if not lora.prompt_prefix:
+            continue
+        normalized_prefix = lora.prompt_prefix.strip().lower()
+        if not normalized_prefix or normalized_prompt.startswith(normalized_prefix):
+            continue
+        prefixes.append(lora.prompt_prefix.strip())
+
+    if not prefixes:
+        return prompt
+
+    return f"{' '.join(prefixes)} {prompt}"
+
+
 def generate_image(model: ImageModel, prompt: str, args: argparse.Namespace) -> str:
     try:
         import torch
@@ -535,6 +578,8 @@ def generate_image(model: ImageModel, prompt: str, args: argparse.Namespace) -> 
         raise RuntimeError("Missing torch. Install CUDA PyTorch before running generation.") from error
 
     loras = resolve_loras(model, args)
+    requested_prompt = prompt
+    prompt = apply_lora_prompt_prefixes(prompt, loras)
     guidance_scale = resolve_guidance_scale(model, args.guidance_scale)
     num_inference_steps = resolve_num_inference_steps(model, args.steps)
     cpu_offload = resolve_cpu_offload(model, args.cpu_offload)
@@ -554,6 +599,8 @@ def generate_image(model: ImageModel, prompt: str, args: argparse.Namespace) -> 
         print("Using CPU offload")
     for lora in loras:
         print(f"Using {lora.adapter_kind}: {lora.adapter_name} ({lora.source}) weight={lora.adapter_weight}")
+        if lora.prompt_prefix:
+            print(f"Using prompt prefix for {lora.adapter_name}: {lora.prompt_prefix}")
 
     image = pipeline(
         prompt=prompt,
@@ -571,6 +618,7 @@ def generate_image(model: ImageModel, prompt: str, args: argparse.Namespace) -> 
         build_metadata(
             model,
             prompt,
+            requested_prompt,
             args,
             output_path,
             resolved_device,

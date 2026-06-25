@@ -80,11 +80,21 @@ python3 -m model_tester \
 The downloaded `lenovo_flux2.safetensors` file is not enabled by default because its tensor shapes target a 6144-wide
 FLUX.2 model, while `black-forest-labs/FLUX.2-klein-9B` uses 4096-wide transformer weights.
 
+FLUX.2 Klein 9B with local SNOFS plus Lenovo Klein:
+
+```bash
+python3 -m model_tester --device cuda --model flux2-klein-uncensored-lenovo
+```
+
+This profile loads `Danrisi/Lenovo_FluxKlein9b_base` and automatically prepends its `l3n0v0.` trigger to the prompt.
+
 Merged FLUX.2 Klein SNOFS profiles:
 
 ```bash
 python3 -m model_tester --device cuda --model flux2-klein-snofs-timdrnl
 python3 -m model_tester --device cuda --model flux2-klein-snofs-sintecs
+python3 -m model_tester --device cuda --model flux2-klein-snofs-timdrnl-lenovo
+python3 -m model_tester --device cuda --model flux2-klein-snofs-sintecs-lenovo
 ```
 
 The FLUX.2 Klein profile defaults to `--steps 4`, `--guidance-scale 1.0`, and CUDA CPU offload. You can override them:
