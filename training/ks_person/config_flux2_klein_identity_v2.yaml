@@ -41,7 +41,7 @@ config:
           use_ema: false
         dtype: bf16
       model:
-        name_or_path: "black-forest-labs/FLUX.2-klein-base-9B"
+        name_or_path: "/workspace/Text-to-Image-LoRa/models/flux2-klein-9b-ai-toolkit"
         arch: "flux2_klein_9b"
         quantize: true
         quantize_te: true
