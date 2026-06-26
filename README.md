@@ -77,6 +77,22 @@ python3 -m model_tester \
   --guidance-scale 2.0
 ```
 
+To match the identity LoRA training samples, use the base Klein model without SNOFS, Lenovo, or the ponpoke text encoder:
+
+```bash
+python3 -m model_tester \
+  --device cuda \
+  --model flux2-klein-base \
+  --steps 20 \
+  --guidance-scale 1.0 \
+  --extra-lora-source models/loras/ks_person_flux2_klein_lora.safetensors \
+  --extra-lora-kind aitoolkit_lora \
+  --extra-lora-adapter-name ks_person \
+  --extra-lora-weight 1.0 \
+  --extra-lora-prompt-prefix "ks_person woman," \
+  --prompt "half body photo, casual snapshot, ordinary room light"
+```
+
 The downloaded `lenovo_flux2.safetensors` file is not enabled by default because its tensor shapes target a 6144-wide
 FLUX.2 model, while `black-forest-labs/FLUX.2-klein-9B` uses 4096-wide transformer weights.
 

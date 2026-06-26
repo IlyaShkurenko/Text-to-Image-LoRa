@@ -72,6 +72,14 @@ IMAGE_MODELS: dict[str, ImageModel] = {
             ),
         ),
     ),
+    "flux2-klein-base": ImageModel(
+        key="flux2-klein-base",
+        base_model_id="black-forest-labs/FLUX.2-klein-base-9B",
+        pipeline="flux2-klein",
+        default_guidance_scale=1.0,
+        default_num_inference_steps=4,
+        default_cpu_offload=True,
+    ),
     "flux2-klein-uncensored": ImageModel(
         key="flux2-klein-uncensored",
         base_model_id="black-forest-labs/FLUX.2-klein-9B",
