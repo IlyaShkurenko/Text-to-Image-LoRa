@@ -1,0 +1,64 @@
+---
+job: extension
+config:
+  name: "ks_person_flux2_klein_identity_v2"
+  process:
+    - type: "sd_trainer"
+      training_folder: "training/ks_person/output"
+      performance_log_every: 100
+      device: cuda:0
+      trigger_word: "ks_person"
+      network:
+        type: "lora"
+        linear: 32
+        linear_alpha: 32
+      save:
+        dtype: float16
+        save_every: 300
+        max_step_saves_to_keep: 5
+        push_to_hub: false
+      datasets:
+        - folder_path: "/workspace/Text-to-Image-LoRa/training/ks_person/dataset"
+          caption_ext: "txt"
+          caption_dropout_rate: 0.0
+          shuffle_tokens: false
+          cache_latents_to_disk: true
+          resolution: [512, 768, 1024]
+      train:
+        batch_size: 1
+        steps: 1800
+        gradient_accumulation_steps: 1
+        train_unet: true
+        train_text_encoder: false
+        gradient_checkpointing: true
+        noise_scheduler: "flowmatch"
+        timestep_type: "sigmoid"
+        optimizer: "adamw8bit"
+        lr: 0.00008
+        optimizer_params:
+          weight_decay: 0.00001
+        ema_config:
+          use_ema: false
+        dtype: bf16
+      model:
+        name_or_path: "black-forest-labs/FLUX.2-klein-9B"
+        arch: "flux2_klein_9b"
+        quantize: true
+        quantize_te: true
+      sample:
+        sampler: "flowmatch"
+        sample_every: 300
+        width: 1024
+        height: 1024
+        prompts:
+          - "ks_person woman, close-up portrait photo, looking at camera, natural indoor light"
+          - "ks_person woman, half body phone photo, ordinary room light"
+          - "ks_person woman, full body realistic phone photo, standing indoors"
+        neg: ""
+        seed: 42
+        walk_seed: true
+        guidance_scale: 1.0
+        sample_steps: 20
+      meta:
+        name: "[name]"
+        version: "2.0"
