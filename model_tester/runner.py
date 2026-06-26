@@ -339,6 +339,70 @@ def apply_lokr_weights(pipeline: object, lora: LoraWeights) -> None:
         )
 
 
+def apply_aitoolkit_lora_weights(pipeline: object, lora: LoraWeights) -> None:
+    try:
+        import torch
+        from safetensors import safe_open
+    except ImportError as error:
+        raise RuntimeError("ai-toolkit LoRA adapters require torch and safetensors.") from error
+
+    transformer = getattr(pipeline, "transformer", None)
+    if transformer is None:
+        raise RuntimeError("ai-toolkit LoRA loading expected pipeline.transformer, but it was not found.")
+
+    modules = dict(transformer.named_modules())
+    grouped_keys: dict[str, set[str]] = defaultdict(set)
+
+    with safe_open(lora.source, framework="pt") as handle:
+        for key in handle.keys():
+            if not key.startswith("diffusion_model."):
+                continue
+            base_key, suffix, tensor_name = key.removeprefix("diffusion_model.").rsplit(".", 2)
+            if tensor_name != "weight":
+                continue
+            grouped_keys[base_key].add(suffix)
+
+        applied = 0
+        missing: list[str] = []
+        unsupported: list[str] = []
+
+        for base_key, suffixes in grouped_keys.items():
+            if not {"lora_A", "lora_B"}.issubset(suffixes):
+                unsupported.append(base_key)
+                continue
+
+            lora_a = handle.get_tensor(f"diffusion_model.{base_key}.lora_A.weight")
+            lora_b = handle.get_tensor(f"diffusion_model.{base_key}.lora_B.weight")
+            delta = (lora_b.float() @ lora_a.float()) * float(lora.adapter_weight)
+            targets = resolve_lokr_target_modules(base_key, delta, modules)
+            if not targets:
+                missing.append(base_key)
+                del delta, lora_a, lora_b
+                continue
+
+            for module, module_delta in targets:
+                weight = module.weight
+                module_delta = module_delta.reshape(weight.shape)
+                with torch.no_grad():
+                    weight.data.add_(module_delta.to(device=weight.device, dtype=weight.dtype))
+                applied += 1
+
+            del delta, lora_a, lora_b
+
+    print(f"Applied ai-toolkit LoRA adapter {lora.adapter_name}: {applied} modules from {lora.source}")
+    if missing:
+        print(
+            f"Warning: skipped {len(missing)} ai-toolkit LoRA modules with no matching transformer module. "
+            f"First skipped: {missing[:5]}",
+            file=sys.stderr,
+        )
+    if unsupported:
+        print(
+            f"Warning: skipped {len(unsupported)} unsupported ai-toolkit LoRA groups. First skipped: {unsupported[:5]}",
+            file=sys.stderr,
+        )
+
+
 def resolve_guidance_scale(model: ImageModel, override_guidance_scale: float | None) -> float:
     if override_guidance_scale is not None:
         return override_guidance_scale
@@ -428,9 +492,13 @@ def create_pipeline(
 
     standard_loras = [lora for lora in loras if lora.adapter_kind == "lora"]
     lokr_loras = [lora for lora in loras if lora.adapter_kind == "lokr"]
+    aitoolkit_loras = [lora for lora in loras if lora.adapter_kind == "aitoolkit_lora"]
 
     for lora in lokr_loras:
         apply_lokr_weights(pipeline, lora)
+
+    for lora in aitoolkit_loras:
+        apply_aitoolkit_lora_weights(pipeline, lora)
 
     for lora in standard_loras:
         lora_kwargs = {

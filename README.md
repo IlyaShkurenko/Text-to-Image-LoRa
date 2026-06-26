@@ -88,6 +88,14 @@ python3 -m model_tester --device cuda --model flux2-klein-uncensored-lenovo
 
 This profile loads `Danrisi/Lenovo_FluxKlein9b_base` and automatically prepends its `l3n0v0.` trigger to the prompt.
 
+FLUX.2 Klein 9B with local SNOFS, the `ks_person` identity LoRA, and Lenovo Klein:
+
+```bash
+python3 -m model_tester --device cuda --model flux2-klein-uncensored-ks-lenovo --prompt "raw phone photo"
+```
+
+This profile loads `models/loras/ks_person_flux2_klein_lora.safetensors` and automatically prepends `ks_person woman,`.
+
 Merged FLUX.2 Klein SNOFS profiles:
 
 ```bash

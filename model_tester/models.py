@@ -3,7 +3,7 @@ from typing import Literal
 
 
 PipelineKind = Literal["auto", "flux2-klein"]
-AdapterKind = Literal["lora", "lokr"]
+AdapterKind = Literal["lora", "lokr", "aitoolkit_lora"]
 
 
 @dataclass(frozen=True)
@@ -109,6 +109,41 @@ IMAGE_MODELS: dict[str, ImageModel] = {
                 source="Danrisi/Lenovo_FluxKlein9b_base",
                 adapter_name="lenovo_klein",
                 adapter_weight=0.6,
+                prompt_prefix="l3n0v0.",
+                use_load_prefix=True,
+                state_dict_key_prefix="transformer.",
+                strip_default_adapter_key=True,
+            ),
+        ),
+        default_guidance_scale=1.0,
+        default_num_inference_steps=4,
+        default_cpu_offload=True,
+    ),
+    "flux2-klein-uncensored-ks-lenovo": ImageModel(
+        key="flux2-klein-uncensored-ks-lenovo",
+        base_model_id="black-forest-labs/FLUX.2-klein-9B",
+        pipeline="flux2-klein",
+        text_encoder=TextEncoderOverride(
+            source="ponpoke/flux2-klein-9b-uncensored-text-encoder",
+        ),
+        loras=(
+            LoraWeights(
+                source="models/loras/klein_snofs_v1_4.safetensors",
+                adapter_name="snofs",
+                adapter_weight=0.8,
+                adapter_kind="lokr",
+            ),
+            LoraWeights(
+                source="models/loras/ks_person_flux2_klein_lora.safetensors",
+                adapter_name="ks_person",
+                adapter_weight=0.75,
+                adapter_kind="aitoolkit_lora",
+                prompt_prefix="ks_person woman,",
+            ),
+            LoraWeights(
+                source="Danrisi/Lenovo_FluxKlein9b_base",
+                adapter_name="lenovo_klein",
+                adapter_weight=0.45,
                 prompt_prefix="l3n0v0.",
                 use_load_prefix=True,
                 state_dict_key_prefix="transformer.",
