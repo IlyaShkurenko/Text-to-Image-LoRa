@@ -10,12 +10,12 @@ config:
       trigger_word: "ks_person"
       network:
         type: "lora"
-        linear: 32
-        linear_alpha: 32
+        linear: 16
+        linear_alpha: 16
       save:
         dtype: float16
-        save_every: 300
-        max_step_saves_to_keep: 5
+        save_every: 200
+        max_step_saves_to_keep: 6
         push_to_hub: false
       datasets:
         - folder_path: "/workspace/Text-to-Image-LoRa/training/ks_person/dataset"
@@ -34,7 +34,7 @@ config:
         noise_scheduler: "flowmatch"
         timestep_type: "sigmoid"
         optimizer: "adamw8bit"
-        lr: 0.00008
+        lr: 0.00006
         optimizer_params:
           weight_decay: 0.00001
         ema_config:
@@ -47,13 +47,13 @@ config:
         quantize_te: true
       sample:
         sampler: "flowmatch"
-        sample_every: 300
+        sample_every: 200
         width: 1024
         height: 1024
         prompts:
-          - "ks_person woman, close-up portrait photo, looking at camera, natural indoor light"
-          - "ks_person woman, half body phone photo, ordinary room light"
-          - "ks_person woman, full body realistic phone photo, standing indoors"
+          - "ks_person woman, close-up portrait, city street background, overcast daylight, wearing a black leather jacket, clear unobstructed face"
+          - "ks_person woman, waist-up phone photo, neutral kitchen background, soft window light, wearing a plain white t-shirt, natural face"
+          - "ks_person woman, full body photo, simple studio background, fitted red dress, realistic body proportions, clear face"
         neg: ""
         seed: 42
         walk_seed: true
