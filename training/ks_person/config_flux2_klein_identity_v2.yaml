@@ -41,7 +41,7 @@ config:
           use_ema: false
         dtype: bf16
       model:
-        name_or_path: "black-forest-labs/FLUX.2-klein-9B"
+        name_or_path: "black-forest-labs/FLUX.2-klein-base-9B"
         arch: "flux2_klein_9b"
         quantize: true
         quantize_te: true
