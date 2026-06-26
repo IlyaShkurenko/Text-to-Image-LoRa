@@ -126,6 +126,59 @@ python3 -m model_tester \
   --prompt "raw phone portrait photo"
 ```
 
+To test a LoRA on clean `black-forest-labs/FLUX.2-klein-9B` without profile LoRAs or text encoder overrides, override the base model source:
+
+```bash
+python3 -m model_tester \
+  --device cuda \
+  --model flux2-klein-base \
+  --base-model-source black-forest-labs/FLUX.2-klein-9B \
+  --lora-source models/loras/ks_person_v2.safetensors \
+  --lora-kind aitoolkit_lora \
+  --lora-adapter-name ks_person \
+  --lora-weight 0.7 \
+  --lora-prompt-prefix "ks_person woman," \
+  --steps 20 \
+  --guidance-scale 1.0 \
+  --prompt "waist-up phone photo, neutral kitchen background, soft window light"
+```
+
+To build the full stack dynamically on the same clean Klein base, pass every LoRA in order. Use empty `""` placeholders for per-LoRA options that do not apply:
+
+```bash
+python3 -m model_tester \
+  --device cuda \
+  --model flux2-klein-base \
+  --base-model-source black-forest-labs/FLUX.2-klein-9B \
+  --lora-source models/loras/klein_snofs_v1_4.safetensors \
+  --lora-kind lokr \
+  --lora-adapter-name snofs \
+  --lora-weight 0.8 \
+  --lora-prompt-prefix "" \
+  --lora-use-load-prefix false \
+  --lora-state-dict-key-prefix "" \
+  --lora-strip-default-adapter-key false \
+  --lora-source models/loras/ks_person_v2.safetensors \
+  --lora-kind aitoolkit_lora \
+  --lora-adapter-name ks_person \
+  --lora-weight 0.7 \
+  --lora-prompt-prefix "ks_person woman," \
+  --lora-use-load-prefix false \
+  --lora-state-dict-key-prefix "" \
+  --lora-strip-default-adapter-key false \
+  --lora-source Danrisi/Lenovo_FluxKlein9b_base \
+  --lora-kind lora \
+  --lora-adapter-name lenovo_klein \
+  --lora-weight 0.45 \
+  --lora-prompt-prefix "l3n0v0." \
+  --lora-use-load-prefix true \
+  --lora-state-dict-key-prefix "transformer." \
+  --lora-strip-default-adapter-key true \
+  --steps 20 \
+  --guidance-scale 1.0 \
+  --prompt "waist-up phone photo, neutral kitchen background, soft window light"
+```
+
 Merged FLUX.2 Klein SNOFS profiles:
 
 ```bash

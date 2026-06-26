@@ -34,6 +34,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         choices=sorted(IMAGE_MODELS),
         help="Model key from model_tester.models.IMAGE_MODELS.",
     )
+    parser.add_argument(
+        "--base-model-source",
+        default=None,
+        help="Override the selected profile's base model Hugging Face repo or local path.",
+    )
     parser.add_argument("--output-dir", default=OUTPUT_DIR, help="Directory for generated images.")
     parser.add_argument("--device", default=DEVICE, help='Device: "auto", "cuda", "mps", or "cpu".')
     parser.add_argument("--dtype", default=TORCH_DTYPE, help='Torch dtype: "bfloat16", "float16", or "float32".')
@@ -91,6 +96,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Prompt prefix for --lora-source. Repeat to match --lora-source.",
     )
     parser.add_argument(
+        "--lora-use-load-prefix",
+        action="append",
+        choices=("true", "false"),
+        default=None,
+        help="Pass prefix to diffusers load_lora_weights for --lora-source. Repeat true/false to match.",
+    )
+    parser.add_argument(
+        "--lora-state-dict-key-prefix",
+        action="append",
+        default=None,
+        help="Prefix normalized LoRA state dict keys before loading. Repeat to match --lora-source.",
+    )
+    parser.add_argument(
+        "--lora-strip-default-adapter-key",
+        action="append",
+        choices=("true", "false"),
+        default=None,
+        help="Strip .default from PEFT LoRA keys before loading. Repeat true/false to match --lora-source.",
+    )
+    parser.add_argument(
         "--extra-lora-source",
         action="append",
         default=None,
@@ -129,9 +154,39 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Prompt prefix for --extra-lora-source. Repeat to match --extra-lora-source.",
     )
     parser.add_argument(
+        "--extra-lora-use-load-prefix",
+        action="append",
+        choices=("true", "false"),
+        default=None,
+        help="Pass prefix to diffusers load_lora_weights for --extra-lora-source. Repeat true/false to match.",
+    )
+    parser.add_argument(
+        "--extra-lora-state-dict-key-prefix",
+        action="append",
+        default=None,
+        help="Prefix normalized LoRA state dict keys before loading. Repeat to match --extra-lora-source.",
+    )
+    parser.add_argument(
+        "--extra-lora-strip-default-adapter-key",
+        action="append",
+        choices=("true", "false"),
+        default=None,
+        help="Strip .default from PEFT LoRA keys before loading. Repeat true/false to match --extra-lora-source.",
+    )
+    parser.add_argument(
         "--text-encoder-source",
         default=None,
         help="Override the selected profile's text encoder repo/local path.",
+    )
+    parser.add_argument(
+        "--no-text-encoder",
+        action="store_true",
+        help="Disable the selected profile's text encoder override.",
+    )
+    parser.add_argument(
+        "--no-profile-loras",
+        action="store_true",
+        help="Do not load LoRAs declared by the selected profile.",
     )
     parser.add_argument(
         "--cpu-offload",
@@ -204,6 +259,10 @@ def get_indexed_adapter_kind(values: list[str] | None, index: int) -> str:
     return get_indexed_str(values, index) or "lora"
 
 
+def get_indexed_bool(values: list[str] | None, index: int) -> bool:
+    return (get_indexed_str(values, index) or "false").lower() == "true"
+
+
 def reject_placeholder_value(option_name: str, value: str | None) -> None:
     if not value:
         return
@@ -219,6 +278,7 @@ def reject_placeholder_value(option_name: str, value: str | None) -> None:
 def resolve_model(args: argparse.Namespace) -> ImageModel:
     model = IMAGE_MODELS[args.model]
 
+    reject_placeholder_value("--base-model-source", args.base_model_source)
     reject_placeholder_value("--text-encoder-source", args.text_encoder_source)
     for lora_source in args.lora_source or []:
         reject_placeholder_value("--lora-source", lora_source)
@@ -229,7 +289,15 @@ def resolve_model(args: argparse.Namespace) -> ImageModel:
     for lora_weight_name in args.extra_lora_weight_name or []:
         reject_placeholder_value("--extra-lora-weight-name", lora_weight_name)
 
-    if args.text_encoder_source:
+    if args.no_text_encoder and args.text_encoder_source:
+        raise RuntimeError("--no-text-encoder cannot be used together with --text-encoder-source.")
+
+    if args.base_model_source:
+        model = replace(model, base_model_id=args.base_model_source)
+
+    if args.no_text_encoder:
+        model = replace(model, text_encoder=None)
+    elif args.text_encoder_source:
         model = replace(model, text_encoder=TextEncoderOverride(source=args.text_encoder_source))
 
     if not args.lora_source and (args.lora_adapter_name or args.lora_weight_name):
@@ -255,6 +323,9 @@ def build_cli_loras(
     adapter_weights: list[float] | None,
     adapter_kinds: list[str] | None,
     prompt_prefixes: list[str] | None,
+    use_load_prefixes: list[str] | None,
+    state_dict_key_prefixes: list[str] | None,
+    strip_default_adapter_keys: list[str] | None,
     default_name_prefix: str,
 ) -> list[LoraWeights]:
     loras = []
@@ -270,6 +341,9 @@ def build_cli_loras(
                 adapter_weight=adapter_weight if adapter_weight is not None else 1.0,
                 adapter_kind=get_indexed_adapter_kind(adapter_kinds, index),
                 prompt_prefix=get_indexed_str(prompt_prefixes, index),
+                use_load_prefix=get_indexed_bool(use_load_prefixes, index),
+                state_dict_key_prefix=get_indexed_str(state_dict_key_prefixes, index),
+                strip_default_adapter_key=get_indexed_bool(strip_default_adapter_keys, index),
             )
         )
 
@@ -285,8 +359,13 @@ def resolve_loras(model: ImageModel, args: argparse.Namespace) -> list[LoraWeigh
             adapter_weights=args.lora_weight,
             adapter_kinds=args.lora_kind,
             prompt_prefixes=args.lora_prompt_prefix,
+            use_load_prefixes=args.lora_use_load_prefix,
+            state_dict_key_prefixes=args.lora_state_dict_key_prefix,
+            strip_default_adapter_keys=args.lora_strip_default_adapter_key,
             default_name_prefix="custom",
         )
+    elif args.no_profile_loras:
+        loras = []
     else:
         loras = profile_loras(model)
         weights = args.lora_weight or []
@@ -305,6 +384,9 @@ def resolve_loras(model: ImageModel, args: argparse.Namespace) -> list[LoraWeigh
                 adapter_weights=args.extra_lora_weight,
                 adapter_kinds=args.extra_lora_kind,
                 prompt_prefixes=args.extra_lora_prompt_prefix,
+                use_load_prefixes=args.extra_lora_use_load_prefix,
+                state_dict_key_prefixes=args.extra_lora_state_dict_key_prefix,
+                strip_default_adapter_keys=args.extra_lora_strip_default_adapter_key,
                 default_name_prefix="extra",
             )
         )
