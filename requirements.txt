@@ -36,7 +36,7 @@ av==16.0.1
 librosa==0.11.0
 mutagen==1.47.0
 lycoris-lora==1.8.3
-torchao==0.10.0
+torchao>=0.16.0
 # Vast runtime note:
 # torchaudio was installed separately to match the existing CUDA runtime:
 # /venv/main/bin/python -m pip install --no-deps --index-url https://download.pytorch.org/whl/cu130 torchaudio==2.11.0+cu130
