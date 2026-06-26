@@ -57,13 +57,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         action="append",
         default=None,
-        help="Override LoRA weight. Repeat once per --lora-source for multiple adapters.",
+        help="Override profile LoRA weight, or custom LoRA weight with --lora-source.",
     )
     parser.add_argument(
         "--lora-source",
         action="append",
         default=None,
-        help="Optional Hugging Face repo or local path for LoRA weights. Repeat to stack adapters.",
+        help="Optional Hugging Face repo or local path for LoRA weights. Replaces profile LoRAs.",
     )
     parser.add_argument(
         "--lora-weight-name",
@@ -76,6 +76,57 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="append",
         default=None,
         help="Adapter name for --lora-source. Repeat to match --lora-source.",
+    )
+    parser.add_argument(
+        "--lora-kind",
+        action="append",
+        choices=("lora", "lokr", "aitoolkit_lora"),
+        default=None,
+        help="Adapter loader kind for --lora-source. Repeat to match --lora-source.",
+    )
+    parser.add_argument(
+        "--lora-prompt-prefix",
+        action="append",
+        default=None,
+        help="Prompt prefix for --lora-source. Repeat to match --lora-source.",
+    )
+    parser.add_argument(
+        "--extra-lora-source",
+        action="append",
+        default=None,
+        help="Additional Hugging Face repo or local path for LoRA weights. Appends to profile LoRAs.",
+    )
+    parser.add_argument(
+        "--extra-lora-weight-name",
+        action="append",
+        default=None,
+        help="Optional LoRA file name inside --extra-lora-source. Repeat to match --extra-lora-source.",
+    )
+    parser.add_argument(
+        "--extra-lora-adapter-name",
+        action="append",
+        default=None,
+        help="Adapter name for --extra-lora-source. Repeat to match --extra-lora-source.",
+    )
+    parser.add_argument(
+        "--extra-lora-weight",
+        type=float,
+        action="append",
+        default=None,
+        help="Adapter weight for --extra-lora-source. Repeat to match --extra-lora-source.",
+    )
+    parser.add_argument(
+        "--extra-lora-kind",
+        action="append",
+        choices=("lora", "lokr", "aitoolkit_lora"),
+        default=None,
+        help="Adapter loader kind for --extra-lora-source. Repeat to match --extra-lora-source.",
+    )
+    parser.add_argument(
+        "--extra-lora-prompt-prefix",
+        action="append",
+        default=None,
+        help="Prompt prefix for --extra-lora-source. Repeat to match --extra-lora-source.",
     )
     parser.add_argument(
         "--text-encoder-source",
@@ -149,6 +200,10 @@ def get_indexed_float(values: list[float] | None, index: int) -> float | None:
     return None
 
 
+def get_indexed_adapter_kind(values: list[str] | None, index: int) -> str:
+    return get_indexed_str(values, index) or "lora"
+
+
 def reject_placeholder_value(option_name: str, value: str | None) -> None:
     if not value:
         return
@@ -167,8 +222,12 @@ def resolve_model(args: argparse.Namespace) -> ImageModel:
     reject_placeholder_value("--text-encoder-source", args.text_encoder_source)
     for lora_source in args.lora_source or []:
         reject_placeholder_value("--lora-source", lora_source)
+    for lora_source in args.extra_lora_source or []:
+        reject_placeholder_value("--extra-lora-source", lora_source)
     for lora_weight_name in args.lora_weight_name or []:
         reject_placeholder_value("--lora-weight-name", lora_weight_name)
+    for lora_weight_name in args.extra_lora_weight_name or []:
+        reject_placeholder_value("--extra-lora-weight-name", lora_weight_name)
 
     if args.text_encoder_source:
         model = replace(model, text_encoder=TextEncoderOverride(source=args.text_encoder_source))
@@ -189,35 +248,68 @@ def resolve_model(args: argparse.Namespace) -> ImageModel:
     return model
 
 
+def build_cli_loras(
+    sources: list[str],
+    adapter_names: list[str] | None,
+    weight_names: list[str] | None,
+    adapter_weights: list[float] | None,
+    adapter_kinds: list[str] | None,
+    prompt_prefixes: list[str] | None,
+    default_name_prefix: str,
+) -> list[LoraWeights]:
+    loras = []
+    for index, source in enumerate(sources):
+        adapter_name = get_indexed_str(adapter_names, index) or f"{default_name_prefix}_{index + 1}"
+        weight_name = get_indexed_str(weight_names, index)
+        adapter_weight = get_indexed_float(adapter_weights, index)
+        loras.append(
+            LoraWeights(
+                source=source,
+                adapter_name=adapter_name,
+                weight_name=weight_name,
+                adapter_weight=adapter_weight if adapter_weight is not None else 1.0,
+                adapter_kind=get_indexed_adapter_kind(adapter_kinds, index),
+                prompt_prefix=get_indexed_str(prompt_prefixes, index),
+            )
+        )
+
+    return loras
+
+
 def resolve_loras(model: ImageModel, args: argparse.Namespace) -> list[LoraWeights]:
     if args.lora_source:
-        loras = []
-        for index, source in enumerate(args.lora_source):
-            adapter_name = get_indexed_str(args.lora_adapter_name, index) or f"custom_{index + 1}"
-            weight_name = get_indexed_str(args.lora_weight_name, index)
-            adapter_weight = get_indexed_float(args.lora_weight, index)
-            loras.append(
-                LoraWeights(
-                    source=source,
-                    adapter_name=adapter_name,
-                    weight_name=weight_name,
-                    adapter_weight=adapter_weight if adapter_weight is not None else 1.0,
-                )
+        loras = build_cli_loras(
+            sources=args.lora_source,
+            adapter_names=args.lora_adapter_name,
+            weight_names=args.lora_weight_name,
+            adapter_weights=args.lora_weight,
+            adapter_kinds=args.lora_kind,
+            prompt_prefixes=args.lora_prompt_prefix,
+            default_name_prefix="custom",
+        )
+    else:
+        loras = profile_loras(model)
+        weights = args.lora_weight or []
+        if weights:
+            loras = [
+                replace(lora, adapter_weight=weights[index] if index < len(weights) else lora.adapter_weight)
+                for index, lora in enumerate(loras)
+            ]
+
+    if args.extra_lora_source:
+        loras.extend(
+            build_cli_loras(
+                sources=args.extra_lora_source,
+                adapter_names=args.extra_lora_adapter_name,
+                weight_names=args.extra_lora_weight_name,
+                adapter_weights=args.extra_lora_weight,
+                adapter_kinds=args.extra_lora_kind,
+                prompt_prefixes=args.extra_lora_prompt_prefix,
+                default_name_prefix="extra",
             )
-        return loras
+        )
 
-    loras = profile_loras(model)
-    if not loras:
-        return []
-
-    weights = args.lora_weight or []
-    if not weights:
-        return loras
-
-    return [
-        replace(lora, adapter_weight=weights[index] if index < len(weights) else lora.adapter_weight)
-        for index, lora in enumerate(loras)
-    ]
+    return loras
 
 
 def resolve_lokr_target_modules(

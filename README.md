@@ -96,6 +96,20 @@ python3 -m model_tester --device cuda --model flux2-klein-uncensored-ks-lenovo -
 
 This profile loads `models/loras/ks_person_flux2_klein_lora.safetensors` and automatically prepends `ks_person woman,`.
 
+You can also add the `ks_person` LoRA dynamically on top of any compatible Flux2 Klein profile:
+
+```bash
+python3 -m model_tester \
+  --device cuda \
+  --model flux2-klein-snofs-sintecs-lenovo \
+  --extra-lora-source models/loras/ks_person_flux2_klein_lora.safetensors \
+  --extra-lora-kind aitoolkit_lora \
+  --extra-lora-adapter-name ks_person \
+  --extra-lora-weight 0.75 \
+  --extra-lora-prompt-prefix "ks_person woman," \
+  --prompt "raw phone portrait photo"
+```
+
 Merged FLUX.2 Klein SNOFS profiles:
 
 ```bash
