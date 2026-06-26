@@ -6,3 +6,6 @@ my_images/
 .env
 models/
 *.safetensors
+training/ks_person/dataset/*
+!training/ks_person/dataset/.gitkeep
+training/ks_person/output/
