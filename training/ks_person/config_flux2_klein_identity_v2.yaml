@@ -4,7 +4,7 @@ config:
   name: "ks_person_flux2_klein_identity_v2"
   process:
     - type: "sd_trainer"
-      training_folder: "training/ks_person/output"
+      training_folder: "/workspace/Text-to-Image-LoRa/training/ks_person/output"
       performance_log_every: 100
       device: cuda:0
       trigger_word: "ks_person"
